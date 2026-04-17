@@ -1,0 +1,21 @@
+# Python sanal ortamları
+venv/
+.venv/
+env/
+
+# Veritabanı dosyaları (SQLite)
+*.db
+*.sqlite3
+
+# Python derleme ve önbellek dosyaları
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Çevresel değişkenler (Gizli anahtarlar, API keyler)
+.env
+
+# IDE (VS Code / PyCharm) ayarları
+.vscode/
+.idea/
