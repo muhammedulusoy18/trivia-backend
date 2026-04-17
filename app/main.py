@@ -1,7 +1,38 @@
 from fastapi import WebSocket,FastAPI,WebSocketDisconnect
+from contextlib import asynccontextmanager
+from sqlalchemy.future import select
+from sqlalchemy.sql.expression import func
+from db.database import Base,engine,AsyncSessionLocal
+from app.models.question import Question as question
 from fastapi.middleware.cors import CORSMiddleware
 from app.websockets.manager import manager
-app = FastAPI()
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+async def seed_questions():
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(question))
+        first_question=result.scalars().first()
+        if  not first_question:
+            sorular=[
+                question(question="FastAPI hangi asenkron sunucu mimarisi üzerine kurulmuştur?", option_a="Flask",
+                         option_b="Starlette", option_c="Django", option_d="Tornado", correct_option="B"),
+                question(question="Python'da değiştirilemez (immutable) veri tipi hangisidir?", option_a="List",
+                         option_b="Dictionary", option_c="Tuple", option_d="Set", correct_option="C")
+
+            ]
+            session.add_all(sorular)
+            await session.commit()
+            print("örnek sorular eklendi!")
+@asynccontextmanager
+async def lifespan(app:FastAPI):
+    print("veritabanı başlatılıyor...")
+    await init_db()
+    await seed_questions()
+    yield
+
+app = FastAPI(title="Trivia Game Server",
+              lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,31 +48,41 @@ async def websocket_endpoint(websocket:WebSocket,client_id:int):
 
     try:
         while True:
-            data=await websocket.receive_json()
+            data= await websocket.receive_json()
             data["client_id"]=client_id
             action=data.get("action")
             if action=="chat":
                 await manager.broadcast(data)
             elif action=="start_game":
-                soru_paketi = {
-                    "action": "new_question",
-                    "question": "FastAPI hangi asenkron sunucu mimarisi üzerine kurulmuştur?",
-                    "options": {
-                        "A": "Flask",
-                        "B": "Starlette",
-                        "C": "Django",
-                        "D": "Tornado"
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(select(question).order_by(func.random()).limit(1))
+                    db_question=result.scalars().first()
+                if db_question:
+                    manager.current_correct_option=db_question.correct_option
+                    questions={
+                        "action":"new_question",
+                        "question":db_question.question,
+                        "options":{
+                            "a":db_question.option_a,
+                            "b":db_question.option_b,
+                            "c":db_question.option_c,
+                            "d":db_question.option_d
                     }
-                }
-                await manager.broadcast(soru_paketi)
+                    }
+                    await manager.broadcast(questions)
+                else:
+                    print("veritabanında soru yok")
+
+
             elif action=="answer":
                 player_answer = data.get("answer")
                 manager.current_answers[client_id]=player_answer
-                await manager.broadcast({"action":"chat" ,"content":f"{client_id} cevap verdi diğer oyuncular bekleniyor"})
+                await manager.broadcast({"action":"chat" ,
+                                         "content":f"oyuncu {client_id} cevap verdi diğer oyuncular bekleniyor"})
                 if len(manager.current_answers)==len(manager.active_connections):
                     for p_id,ans in manager.current_answers.items():
-                        if ans=="B" or ans=="b":
-                            manager.scores[client_id]+=10
+                        if ans.upper()==manager.current_correct_option.upper():
+                            manager.scores[p_id]+=10
                             await manager.broadcast({"action":"chat",
                                                      "content":f"oyuncu {p_id} doğru cevap verdi"
                                                      })
