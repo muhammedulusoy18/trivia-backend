@@ -1,3 +1,5 @@
+import random
+import asyncio
 from fastapi import WebSocket,FastAPI,WebSocketDisconnect
 from contextlib import asynccontextmanager
 from sqlalchemy.future import select
@@ -58,7 +60,22 @@ async def websocket_endpoint(websocket:WebSocket,client_id:int):
                     result = await session.execute(select(question).order_by(func.random()).limit(1))
                     db_question=result.scalars().first()
                 if db_question:
-                    manager.current_correct_option=db_question.correct_option
+                    option_list=[
+                        {"key": "A", "text": db_question.option_a},
+                        {"key": "B", "text": db_question.option_b},
+                        {"key": "C", "text": db_question.option_c},
+                        {"key": "D", "text": db_question.option_d}
+                                 ]
+                    correct_text=getattr(db_question,f"option_{db_question.correct_option.lower()}")
+                    manager.current_correct_answers_text=correct_text
+                    random.shuffle(option_list)
+                    shuffled_options={}
+                    new_labels = ["A", "B", "C", "D"]
+                    for i in range(4):
+                        shuffled_options[new_labels[i]] = option_list[i]["text"]
+                        if option_list[i]["text"] == correct_text:
+                            manager.current_correct_answers=new_labels[i]
+
                     questions={
                         "action":"new_question",
                         "question":db_question.question,
@@ -81,7 +98,7 @@ async def websocket_endpoint(websocket:WebSocket,client_id:int):
                                          "content":f"oyuncu {client_id} cevap verdi diğer oyuncular bekleniyor"})
                 if len(manager.current_answers)==len(manager.active_connections):
                     for p_id,ans in manager.current_answers.items():
-                        if ans.upper()==manager.current_correct_option.upper():
+                        if ans.upper()==manager.current_correct_answers.upper():
                             manager.scores[p_id]+=10
                             await manager.broadcast({"action":"chat",
                                                      "content":f"oyuncu {p_id} doğru cevap verdi"
@@ -96,6 +113,10 @@ async def websocket_endpoint(websocket:WebSocket,client_id:int):
                                      "scores": manager.scores
                                      })
                     manager.current_answers = {}
+                    await asyncio.sleep(3)  # 3 saniye bekleme süresi
+                    await manager.broadcast({"action": "chat", "content": "Yeni soru geliyor..."})
+                    await asyncio.sleep(1)
+
             else:
                 print(f"bilinmeyen eylem: {action}")
 

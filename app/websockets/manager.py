@@ -6,6 +6,7 @@ class ConnectionManager:
         self.scores:dict = {}
         self.current_answers:dict = {}
         self.current_correct_answers:str=""
+        self.current_correct_answers_text:str
     #async tanımladık diğer işlemleri bloklamasın diye
     async def connect(self ,websocket: WebSocket):
         await websocket.accept()
