@@ -1,13 +1,15 @@
+import asyncio
 from fastapi import WebSocket
-from typing import List
+from typing import List,Optional
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.scores:dict = {}
         self.current_answers:dict = {}
-        self.current_correct_answers:str=""
-        self.current_correct_answers_text:str
-    #async tanımladık diğer işlemleri bloklamasın diye
+        self.current_correct_answer:str= ""
+        self.current_correct_answer_text:str=""
+        self.timer_task:Optional[asyncio.Task] = None
+        self.timer:bool=False
     async def connect(self ,websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
@@ -18,7 +20,8 @@ class ConnectionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
-            except RuntimeError:
+            except Exception as e:
+                print(e)
                 dead_connections.append(connection)
         for dead in dead_connections:
             if dead in self.active_connections:

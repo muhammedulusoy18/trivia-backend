@@ -25,10 +25,23 @@ async def seed_questions():
             session.add_all(sorular)
             await session.commit()
             print("Örnek sorular eklendi!")
+async def start_timer(seconds:int,manager,time_is_up=False):
 
+   try:
+        i=0
+        while i <seconds:
+            await asyncio.sleep(1)
+            remaining_seconds = seconds - i
+            if remaining_seconds%5==0 or remaining_seconds<=5:
+                await manager.broadcast({"action": "chat", "content": f"{remaining_seconds} saniye kaldı"})
+            i+=1
+        await manager.broadcast({"action":"chat","content":f"Süre bitti"})
+        await finish_round(manager,time_is_up=True)
+   except asyncio.CancelledError:
+           pass
 
 async def get_and_send_new_question(manager_instance):
-    """Yeni bir soru çeker, karıştırır ve tüm oyunculara yayınlar."""
+
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(question).order_by(func.random()).limit(1))
         db_question = result.scalars().first()
@@ -41,10 +54,10 @@ async def get_and_send_new_question(manager_instance):
             {"text": db_question.option_d}
         ]
 
-        # Doğru metni bul (getattr kullanımı)
+
         correct_text = getattr(db_question, f"option_{db_question.correct_option.lower()}")
 
-        # Şıkları karıştır
+
         random.shuffle(option_list)
 
         shuffled_options = {}
@@ -55,20 +68,20 @@ async def get_and_send_new_question(manager_instance):
             text = option_list[i]["text"]
             shuffled_options[label] = text
             if text == correct_text:
-                # Manager'daki doğru cevabı bu elin yeni harfiyle güncelle
+
                 manager_instance.current_correct_answer = label
 
         question_packet = {
             "action": "new_question",
-            "question": db_question.question,  # Modelinde sütun adı 'question'
+            "question": db_question.question,
             "options": shuffled_options
         }
         await manager_instance.broadcast(question_packet)
+        manager.timer_task = asyncio.create_task(start_timer(15, manager))
     else:
         print("Veritabanında soru bulunamadı.")
 
 
-# --- APP AYARLARI ---
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -87,6 +100,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+async def finish_round(manager,time_is_up=False):
+    if time_is_up==False and manager.timer_task and not manager.timer_task.done():
+        manager.timer_task.cancel()
+    for p_id, ans in manager.current_answers.items():
+        if ans.upper() == manager.current_correct_answer.upper():
+            manager.scores[p_id] += 10
+            await manager.broadcast({"action": "chat", "content": f"Oyuncu {p_id} doğru bildi! ✅"})
+        else:
+            await manager.broadcast(
+                {"action": "chat", "content": f"Oyuncu {p_id} yanlış cevap verdi! ❌"})
+
+    await manager.broadcast({"action": "scoreboard", "scores": manager.scores})
+
+    manager.current_answers = {}
+
+    await asyncio.sleep(3)
+    await manager.broadcast({"action": "chat", "content": "Yeni soru geliyor..."})
+    await asyncio.sleep(1)
+    await get_and_send_new_question(manager)
+
+
+
+
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: int):
     await manager.connect(websocket)
@@ -110,29 +146,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
                     "action": "chat",
                     "content": f"Oyuncu {client_id} cevap verdi, diğerleri bekleniyor..."
                 })
-
-
                 if len(manager.current_answers) == len(manager.active_connections):
-                    for p_id, ans in manager.current_answers.items():
-                        if ans.upper() == manager.current_correct_answer.upper():
-                            manager.scores[p_id] += 10
-                            await manager.broadcast({"action": "chat", "content": f"Oyuncu {p_id} doğru bildi! ✅"})
-                        else:
-                            await manager.broadcast(
-                                {"action": "chat", "content": f"Oyuncu {p_id} yanlış cevap verdi! ❌"})
 
-
-                    await manager.broadcast({"action": "scoreboard", "scores": manager.scores})
-
-
-                    manager.current_answers = {}
-
-
-                    await asyncio.sleep(3)
-                    await manager.broadcast({"action": "chat", "content": "Yeni soru geliyor..."})
-                    await asyncio.sleep(1)
-                    await get_and_send_new_question(manager)
-
+                    await finish_round(manager)
             else:
                 print(f"Bilinmeyen eylem: {action}")
 
