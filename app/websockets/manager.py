@@ -10,6 +10,7 @@ class ConnectionManager:
         self.current_correct_answer_text:str=""
         self.timer_task:Optional[asyncio.Task] = None
         self.timer:bool=False
+        self.current_question_points:int=10
     async def connect(self ,websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)

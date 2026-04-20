@@ -10,3 +10,4 @@ class Question(Base):
     option_c = Column(String)
     option_d = Column(String)
     correct_option= Column(String)
+    difficulty = Column(String,default="Orta")

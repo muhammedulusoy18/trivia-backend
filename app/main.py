@@ -25,7 +25,7 @@ async def seed_questions():
             session.add_all(sorular)
             await session.commit()
             print("Örnek sorular eklendi!")
-async def start_timer(seconds:int,manager,time_is_up=False):
+async def start_timer(seconds:int,manager):
 
    try:
         i=0
@@ -56,7 +56,13 @@ async def get_and_send_new_question(manager_instance):
 
 
         correct_text = getattr(db_question, f"option_{db_question.correct_option.lower()}")
-
+        difficulty=db_question.difficulty
+        if difficulty =='Kolay':
+           manager.current_question_points=5
+        elif difficulty =='Orta':
+            manager.current_question_points=10
+        elif difficulty =='Zor':
+            manager.current_question_points=20
 
         random.shuffle(option_list)
 
@@ -105,7 +111,7 @@ async def finish_round(manager,time_is_up=False):
         manager.timer_task.cancel()
     for p_id, ans in manager.current_answers.items():
         if ans.upper() == manager.current_correct_answer.upper():
-            manager.scores[p_id] += 10
+            manager.scores[p_id] += manager.current_question_points
             await manager.broadcast({"action": "chat", "content": f"Oyuncu {p_id} doğru bildi! ✅"})
         else:
             await manager.broadcast(
