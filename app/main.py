@@ -1,5 +1,6 @@
 import random
 import asyncio
+import time
 from fastapi import WebSocket, FastAPI, WebSocketDisconnect
 from contextlib import asynccontextmanager
 from sqlalchemy.future import select
@@ -83,6 +84,7 @@ async def get_and_send_new_question(manager_instance):
             "options": shuffled_options
         }
         await manager_instance.broadcast(question_packet)
+        manager_instance.question_start_time=time.time()
         manager.timer_task = asyncio.create_task(start_timer(15, manager))
     else:
         print("Veritabanında soru bulunamadı.")
@@ -111,8 +113,12 @@ async def finish_round(manager,time_is_up=False):
         manager.timer_task.cancel()
     for p_id, ans in manager.current_answers.items():
         if ans.upper() == manager.current_correct_answer.upper():
-            manager.scores[p_id] += manager.current_question_points
-            await manager.broadcast({"action": "chat", "content": f"Oyuncu {p_id} doğru bildi! ✅"})
+            time_taken=manager.answer_times[p_id]-manager.question_start_time
+            remaining_seconds=max(0,15-time_taken)
+            bonus_points=int(remaining_seconds)
+            total_earned=manager.current_question_points+bonus_points
+            manager.scores[p_id] +=total_earned
+            await manager.broadcast({"action": "chat", "content": f"Oyuncu {p_id} doğru bildi! ✅ (+{total_earned} Puan ⚡"} )
         else:
             await manager.broadcast(
                 {"action": "chat", "content": f"Oyuncu {p_id} yanlış cevap verdi! ❌"})
@@ -120,6 +126,7 @@ async def finish_round(manager,time_is_up=False):
     await manager.broadcast({"action": "scoreboard", "scores": manager.scores})
 
     manager.current_answers = {}
+    manager.answer_times = {}
 
     await asyncio.sleep(3)
     await manager.broadcast({"action": "chat", "content": "Yeni soru geliyor..."})
@@ -147,6 +154,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
             elif action == "answer":
                 player_answer = data.get("answer")
                 manager.current_answers[client_id] = player_answer
+                manager.answer_times[client_id] = time.time()
 
                 await manager.broadcast({
                     "action": "chat",
