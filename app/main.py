@@ -1,6 +1,8 @@
 import random
 import asyncio
 import time
+import os
+from fastapi.responses import HTMLResponse
 from fastapi import WebSocket, FastAPI, WebSocketDisconnect
 from contextlib import asynccontextmanager
 from sqlalchemy.future import select
@@ -135,9 +137,16 @@ async def finish_round(manager,time_is_up=False):
 
 
 
-
+@app.get("/")
+async def get_test_page():
+    html_path = "test_client.html"
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    return {"error": "test_client.html bulunamadı!"}
 @app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: int):
+async def websocket_endpoint(websocket: WebSocket, client_id):
     await manager.connect(websocket)
     manager.scores[client_id] = 0
 
@@ -149,8 +158,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
             if action == "chat":
                 await manager.broadcast(data)
             elif action == "start_game":
-                await get_and_send_new_question(manager)
-
+                if not manager.is_active:
+                    manager.is_active = True
+                    await get_and_send_new_question(manager)
+                else :
+                    await websocket.send_json({"action":"chat",
+                    "content": "⚠️ Oyun zaten devam ediyor!"
+                    })
             elif action == "answer":
                 player_answer = data.get("answer")
                 manager.current_answers[client_id] = player_answer

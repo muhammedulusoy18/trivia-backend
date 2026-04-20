@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trivia Game Test Client</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e2e; color: #cdd6f4; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { background-color: #313244; padding: 20px; border-radius: 10px; width: 100%; max-width: 600px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        input, button { padding: 10px; margin: 5px 0; border: none; border-radius: 5px; font-size: 16px; }
+        input { width: calc(100% - 22px); background-color: #45475a; color: #cdd6f4; }
+        button { background-color: #89b4fa; color: #1e1e2e; font-weight: bold; cursor: pointer; width: 100%; transition: 0.2s; }
+        button:hover { background-color: #b4befe; }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .option-btn { background-color: #f38ba8; color: #1e1e2e; }
+        .option-btn:hover { background-color: #eba0ac; }
+        #logs { background-color: #181825; padding: 10px; border-radius: 5px; height: 200px; overflow-y: auto; margin-top: 20px; font-family: monospace; font-size: 14px; }
+        .log-msg { margin-bottom: 5px; border-bottom: 1px solid #313244; padding-bottom: 5px; }
+        .scoreboard { background-color: #a6e3a1; color: #1e1e2e; padding: 10px; border-radius: 5px; margin-top: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2 style="text-align: center;">🚀 Trivia Test Ekranı</h2>
+        
+        <div id="connectionArea">
+            <input type="text" id="clientId" placeholder="Oyuncu ID Girin">
+            <button onclick="connectWS()">Sunucuya Bağlan</button>
+        </div>
+
+        <div id="gameArea" style="display: none; margin-top: 20px;">
+            <button onclick="startGame()" style="background-color: #a6e3a1;">Oyunu Başlat</button>
+            
+            <div id="questionContainer" style="margin-top: 20px; display: none;">
+                <h3 id="questionText">Soru buraya gelecek...</h3>
+                <div class="options-grid" id="optionsArea">
+                    </div>
+            </div>
+        </div>
+
+        <div id="scoreArea" class="scoreboard" style="display: none;"></div>
+
+        <div id="logs">
+            <div style="color: #6c7086;">Sistem logları burada görünecek...</div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let myId;
+
+        function logMessage(msg) {
+            const logsDiv = document.getElementById("logs");
+            logsDiv.innerHTML += `<div class="log-msg">${msg}</div>`;
+            logsDiv.scrollTop = logsDiv.scrollHeight; // Otomatik aşağı kaydır
+        }
+
+        function connectWS() {
+            myId = document.getElementById("clientId").value;
+            if (!myId) {
+                alert("Lütfen bir ID girin!");
+                return;
+            }
+
+            const host = window.location.host;
+            ws = new WebSocket(`ws://${host}/ws/${myId}`);
+
+            ws.onopen = function() {
+                document.getElementById("connectionArea").style.display = "none";
+                document.getElementById("gameArea").style.display = "block";
+                logMessage(`🟢 Bağlantı başarılı! Oyuncu ID: ${myId}`);
+            };
+
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                if (data.action === "chat") {
+                    logMessage(`💬 ${data.content}`);
+                } 
+                else if (data.action === "new_question") {
+                    document.getElementById("scoreArea").style.display = "none";
+                    document.getElementById("questionContainer").style.display = "block";
+                    document.getElementById("questionText").innerText = data.question;
+                    
+                    const optionsArea = document.getElementById("optionsArea");
+                    optionsArea.innerHTML = ""; // Eski şıkları temizle
+                    
+                    // Şıkları buton olarak oluştur
+                    for (const [key, value] of Object.entries(data.options)) {
+                        const btn = document.createElement("button");
+                        btn.className = "option-btn";
+                        btn.innerText = `${key}: ${value}`;
+                        btn.onclick = () => sendAnswer(key);
+                        optionsArea.appendChild(btn);
+                    }
+                    logMessage(`❓ Yeni soru geldi!`);
+                }
+                else if (data.action === "scoreboard") {
+                    document.getElementById("questionContainer").style.display = "none";
+                    const scoreDiv = document.getElementById("scoreArea");
+                    scoreDiv.style.display = "block";
+                    scoreDiv.innerHTML = "🏆 SKORBORD:<br>";
+                    for (const [player, score] of Object.entries(data.scores)) {
+                        scoreDiv.innerHTML += `Oyuncu ${player}: ${score} Puan<br>`;
+                    }
+                }
+            };
+
+            ws.onclose = function() {
+                logMessage("🔴 Bağlantı koptu.");
+            };
+        }
+
+        function startGame() {
+            ws.send(JSON.stringify({ action: "start_game" }));
+            document.querySelector("button[onclick='startGame()']").style.display = "none"; // Butonu sakla
+        }
+
+        function sendAnswer(answerKey) {
+            ws.send(JSON.stringify({ action: "answer", answer: answerKey }));
+            logMessage(`📤 Cevap gönderildi: ${answerKey}`);
+            document.getElementById("optionsArea").innerHTML = "<em>Diğer oyuncular bekleniyor...</em>";
+        }
+    </script>
+</body>
+</html>

@@ -13,6 +13,7 @@ class ConnectionManager:
         self.current_question_points:int=10
         self.question_start_time:float=0.0
         self.answer_times:dict={}
+        self.is_active:bool=False
 
     async def connect(self ,websocket: WebSocket):
         await websocket.accept()
