@@ -2,15 +2,19 @@ import random
 import asyncio
 import time
 import os
+import jwt
+from app.core.config import settings
+from app.models.user import User
 from fastapi.responses import HTMLResponse
-from fastapi import WebSocket, FastAPI, WebSocketDisconnect
+from fastapi import WebSocket, FastAPI, WebSocketDisconnect,Query
 from contextlib import asynccontextmanager
 from sqlalchemy.future import select
 from sqlalchemy.sql.expression import func
-from db.database import Base, engine, AsyncSessionLocal
+from app.db.database import Base, engine, AsyncSessionLocal
 from app.models.question import Question as question
 from fastapi.middleware.cors import CORSMiddleware
 from app.websockets.manager import manager
+from app.routers.api import auth
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -103,7 +107,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Trivia Game Server", lifespan=lifespan)
-
+app.include_router(auth.router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -137,7 +141,7 @@ async def finish_round(manager,time_is_up=False):
         await get_and_send_new_question(manager)
     else:
         manager.is_active = False
-        manager.broadcast({
+        await manager.broadcast({
             "action": "chat",
             "content": "🎉 OYUN BİTTİ! Katılan herkese teşekkürler. İşte final sonuçları:"
         })
@@ -153,28 +157,63 @@ async def get_test_page():
             html_content = f.read()
         return HTMLResponse(content=html_content)
     return {"error": "test_client.html bulunamadı!"}
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id):
+
+
+@app.websocket("/ws")  # DİKKAT: Artık /{client_id} yok! Sadece /ws
+async def websocket_endpoint(websocket: WebSocket, token: str = Query(None)):
+    if token is None:
+        await websocket.close(code=1008, reason="Token bulunamadı")
+        return
+
+    # 1. TOKEN ÇÖZÜMLEME
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            await websocket.close(code=1008, reason="Token içinde email yok")
+            return
+    except jwt.PyJWTError:
+        await websocket.close(code=1008, reason="Geçersiz token")
+        return
+
+    # 2. VERİTABANINDAN KULLANICIYI BULMA (Gerçek Username'i almak için)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User).filter(User.email == email))
+        user = result.scalar_one_or_none()
+
+    if not user:
+        await websocket.close(code=1008, reason="Kullanıcı bulunamadı")
+        return
+
+    # 3. KULLANICI DOĞRULANDI, OYUNA AL!
+    client_id = user.username  # Artık kimlik, veritabanındaki gerçek kullanıcı adı!
     await manager.connect(websocket)
-    manager.scores[client_id] = 0
+
+    # Eğer oyuncu skorbordda yoksa sıfır puanla ekle
+    if client_id not in manager.scores:
+        manager.scores[client_id] = 0
 
     try:
         while True:
             data = await websocket.receive_json()
             data["client_id"] = client_id
             action = data.get("action")
+
             if action == "chat":
                 await manager.broadcast(data)
+
             elif action == "start_game":
                 if not manager.is_active:
                     manager.is_active = True
-                    manager.current_question_id=0
+                    manager.current_question_id = 0
                     manager.scores = {k: 0 for k in manager.scores}
                     await get_and_send_new_question(manager)
-                else :
-                    await websocket.send_json({"action":"chat",
-                    "content": "⚠️ Oyun zaten devam ediyor!"
+                else:
+                    await websocket.send_json({
+                        "action": "chat",
+                        "content": "⚠️ Oyun zaten devam ediyor!"
                     })
+
             elif action == "answer":
                 player_answer = data.get("answer")
                 manager.current_answers[client_id] = player_answer
@@ -185,7 +224,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id):
                     "content": f"Oyuncu {client_id} cevap verdi, diğerleri bekleniyor..."
                 })
                 if len(manager.current_answers) == len(manager.active_connections):
-
                     await finish_round(manager)
             else:
                 print(f"Bilinmeyen eylem: {action}")

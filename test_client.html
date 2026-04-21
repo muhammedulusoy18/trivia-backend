@@ -2,133 +2,138 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trivia Game Test Client</title>
+    <title>Trivia Game - Akıllı Giriş</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e2e; color: #cdd6f4; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .container { background-color: #313244; padding: 20px; border-radius: 10px; width: 100%; max-width: 600px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        input, button { padding: 10px; margin: 5px 0; border: none; border-radius: 5px; font-size: 16px; }
-        input { width: calc(100% - 22px); background-color: #45475a; color: #cdd6f4; }
-        button { background-color: #89b4fa; color: #1e1e2e; font-weight: bold; cursor: pointer; width: 100%; transition: 0.2s; }
-        button:hover { background-color: #b4befe; }
-        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
-        .option-btn { background-color: #f38ba8; color: #1e1e2e; }
-        .option-btn:hover { background-color: #eba0ac; }
-        #logs { background-color: #181825; padding: 10px; border-radius: 5px; height: 200px; overflow-y: auto; margin-top: 20px; font-family: monospace; font-size: 14px; }
-        .log-msg { margin-bottom: 5px; border-bottom: 1px solid #313244; padding-bottom: 5px; }
-        .scoreboard { background-color: #a6e3a1; color: #1e1e2e; padding: 10px; border-radius: 5px; margin-top: 20px; font-weight: bold; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1e1e2f; color: #fff; padding: 20px; max-width: 800px; margin: auto; }
+        .card { background-color: #2a2a40; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        input { width: calc(100% - 22px); padding: 10px; margin-bottom: 10px; border-radius: 5px; border: none; }
+        button { background-color: #ffcc00; color: #1e1e2f; border: none; padding: 10px 20px; cursor: pointer; border-radius: 5px; font-weight: bold; width: 100%; margin: 5px 0;}
+        #logBox { height: 150px; overflow-y: scroll; background: #151522; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; border: 1px solid #333;}
+        #optionsArea button { background-color: #4CAF50; color: white; margin: 5px 0; }
+        .score-item { display: flex; justify-content: space-between; padding: 8px; background: #33334d; margin: 4px 0; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h2 style="text-align: center;">🚀 Trivia Test Ekranı</h2>
-        
-        <div id="connectionArea">
-            <input type="text" id="clientId" placeholder="Oyuncu ID Girin">
-            <button onclick="connectWS()">Sunucuya Bağlan</button>
-        </div>
+    <h1>🚀 Skytech'26 Trivia</h1>
 
-        <div id="gameArea" style="display: none; margin-top: 20px;">
-            <button onclick="startGame()" style="background-color: #a6e3a1;">Oyunu Başlat</button>
-            
-            <div id="questionContainer" style="margin-top: 20px; display: none;">
-                <h3 id="questionText">Soru buraya gelecek...</h3>
-                <div class="options-grid" id="optionsArea">
-                    </div>
-            </div>
-        </div>
+    <div id="loginArea" class="card">
+        <h3>Oyuncu Girişi</h3>
+        <input type="text" id="emailInput" placeholder="E-posta Adresi">
+        <input type="password" id="passInput" placeholder="Şifre">
+        <button onclick="loginAndConnect()">Giriş Yap ve Bağlan</button>
+        <p id="statusMsg" style="color: #ff4444; font-size: 14px;"></p>
+    </div>
 
-        <div id="scoreArea" class="scoreboard" style="display: none;"></div>
+    <div id="gameArea" class="card" style="display: none;">
+        <button id="startBtn" style="background-color: #e91e63;" onclick="startGame()">🎮 Oyunu Başlat</button>
+        <h2 id="questionText">Soru Bekleniyor...</h2>
+        <div id="optionsArea"></div>
+    </div>
 
-        <div id="logs">
-            <div style="color: #6c7086;">Sistem logları burada görünecek...</div>
-        </div>
+    <div class="card" id="scoreCard" style="display: none;">
+        <h3>🏆 Liderlik Tablosu</h3>
+        <div id="scoreboardList"></div>
+    </div>
+
+    <div class="card">
+        <h3>Sistem Günlüğü</h3>
+        <div id="logBox"></div>
     </div>
 
     <script>
         let ws;
-        let myId;
 
-        function logMessage(msg) {
-            const logsDiv = document.getElementById("logs");
-            logsDiv.innerHTML += `<div class="log-msg">${msg}</div>`;
-            logsDiv.scrollTop = logsDiv.scrollHeight; // Otomatik aşağı kaydır
-        }
+        async function loginAndConnect() {
+            const email = document.getElementById("emailInput").value;
+            const password = document.getElementById("passInput").value;
+            const statusMsg = document.getElementById("statusMsg");
 
-        function connectWS() {
-            myId = document.getElementById("clientId").value;
-            if (!myId) {
-                alert("Lütfen bir ID girin!");
-                return;
+            logMessage("🔑 Giriş yapılıyor...");
+
+            try {
+                // 1. ADIM: FastAPI Auth sistemine login isteği atıyoruz
+                const formData = new FormData();
+                formData.append('username', email); // OAuth2 şifre akışında email 'username' olarak gider
+                formData.append('password', password);
+
+                const response = await fetch('http://localhost:8000/auth/login', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Giriş başarısız! E-posta veya şifre hatalı.");
+
+                const authData = await response.json();
+                const token = authData.access_token;
+
+                logMessage("✅ Token alındı, WebSocket'e bağlanılıyor...");
+
+                // 2. ADIM: Aldığımız token ile WebSocket'i başlatıyoruz
+                connectWebSocket(token);
+
+            } catch (err) {
+                statusMsg.innerText = err.message;
+                logMessage("❌ Hata: " + err.message);
             }
+        }
 
-            const host = window.location.host;
-            ws = new WebSocket(`ws://${host}/ws/${myId}`);
+        function connectWebSocket(token) {
+            ws = new WebSocket(`ws://localhost:8000/ws?token=${token}`);
 
-            ws.onopen = function() {
-                document.getElementById("connectionArea").style.display = "none";
+            ws.onopen = () => {
+                document.getElementById("loginArea").style.display = "none";
                 document.getElementById("gameArea").style.display = "block";
-                logMessage(`🟢 Bağlantı başarılı! Oyuncu ID: ${myId}`);
+                document.getElementById("scoreCard").style.display = "block";
+                logMessage("🌐 Oyun sunucusuna bağlanıldı!");
             };
 
-            ws.onmessage = function(event) {
+            ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                
-                if (data.action === "chat") {
-                    logMessage(`💬 ${data.content}`);
-                } 
-                else if (data.action === "new_question") {
-                    document.getElementById("scoreArea").style.display = "none";
-                    document.getElementById("questionContainer").style.display = "block";
-                    document.getElementById("questionText").innerText = data.question;
-                    
-                    const optionsArea = document.getElementById("optionsArea");
-                    optionsArea.innerHTML = ""; // Eski şıkları temizle
-                    
-                    // Şıkları buton olarak oluştur
-                    for (const [key, value] of Object.entries(data.options)) {
-                        const btn = document.createElement("button");
-                        btn.className = "option-btn";
-                        btn.innerText = `${key}: ${value}`;
-                        btn.onclick = () => sendAnswer(key);
-                        optionsArea.appendChild(btn);
-                    }
-                    logMessage(`❓ Yeni soru geldi!`);
-                }
-                else if (data.action === "scoreboard") {
-                    document.getElementById("questionContainer").style.display = "none";
-                    const scoreDiv = document.getElementById("scoreArea");
-                    scoreDiv.style.display = "block";
-                    scoreDiv.innerHTML = "🏆 SKORBORD:<br>";
-                    for (const [player, score] of Object.entries(data.scores)) {
-                        scoreDiv.innerHTML += `Oyuncu ${player}: ${score} Puan<br>`;
-                    }
-                }
+                if (data.action === "chat") logMessage(data.content);
+                else if (data.action === "new_question") showQuestion(data);
+                else if (data.action === "scoreboard") updateScores(data.scores);
                 else if (data.action === "game_over") {
-                    // Oyunu Başlat butonunu tekrar görünür yap
-                    document.querySelector("button[onclick='startGame()']").style.display = "block";
-                    // Şıkların olduğu alanı temizle ve bilgi ver
-                    document.getElementById("optionsArea").innerHTML = "<em>Oyun bitti, yeni bir oyun başlatabilirsiniz.</em>";
+                    document.getElementById("startBtn").style.display = "block";
+                    document.getElementById("questionText").innerText = "Oyun Bitti!";
+                }
+            };
+
+            ws.onclose = () => {
+                alert("Bağlantı koptu!");
+                location.reload();
+            };
+        }
+
+        function showQuestion(data) {
+            document.getElementById("startBtn").style.display = "none";
+            document.getElementById("questionText").innerText = data.question;
+            const area = document.getElementById("optionsArea");
+            area.innerHTML = "";
+            for (const [key, val] of Object.entries(data.options)) {
+                const b = document.createElement("button");
+                b.innerText = `${key}: ${val}`;
+                b.onclick = () => {
+                    ws.send(JSON.stringify({action: "answer", answer: key}));
+                    area.innerHTML = "<em>Cevap gönderildi...</em>";
                 };
-            };
-                
-
-            ws.onclose = function() {
-                logMessage("🔴 Bağlantı koptu.");
-            };
-            
+                area.appendChild(b);
+            }
         }
 
-        function startGame() {
-            ws.send(JSON.stringify({ action: "start_game" }));
-            document.querySelector("button[onclick='startGame()']").style.display = "none"; // Butonu sakla
+        function startGame() { ws.send(JSON.stringify({action: "start_game"})); }
+
+        function updateScores(scores) {
+            const list = document.getElementById("scoreboardList");
+            list.innerHTML = Object.entries(scores)
+                .sort((a,b) => b[1]-a[1])
+                .map(s => `<div class="score-item"><span>${s[0]}</span><span>${s[1]} Puan</span></div>`)
+                .join("");
         }
 
-        function sendAnswer(answerKey) {
-            ws.send(JSON.stringify({ action: "answer", answer: answerKey }));
-            logMessage(`📤 Cevap gönderildi: ${answerKey}`);
-            document.getElementById("optionsArea").innerHTML = "<em>Diğer oyuncular bekleniyor...</em>";
+        function logMessage(m) {
+            const box = document.getElementById("logBox");
+            box.innerHTML = `<div>> ${m}</div>` + box.innerHTML;
         }
     </script>
 </body>
