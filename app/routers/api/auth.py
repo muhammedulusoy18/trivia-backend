@@ -30,30 +30,16 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
 # GİRİŞ YAPMA
 @router.post("/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    print("--- GİRİŞ TESTİ BAŞLIYOR ---")
-    print(f"1. FORMDAN GELEN EMAIL (Username kutusu): {form_data.username}")
-    print(f"2. FORMDAN GELEN ŞİFRE: {form_data.password}")
-
-    # Veritabanında kullanıcıyı arıyoruz
+    # NOT: OAuth2 standartlarında email alanı 'username' olarak gelir.
     user = await user_crud.get_user_by_email(db, email=form_data.username)
-
     if not user:
-        print("3. SONUÇ: Veritabanında bu e-postaya ait kullanıcı BULUNAMADI!")
         raise HTTPException(status_code=400, detail="Hatalı e-posta veya şifre.")
 
-    print(f"3. KULLANICI BULUNDU: {user.email}")
-    print(f"4. DB'DEKİ HASH: {user.hashed_password}")
-
-    # Şifreleri karşılaştırıyoruz
-    is_valid = security.verify_password(form_data.password, user.hashed_password)
-    print(f"5. ŞİFRE DOĞRULAMA SONUCU: {is_valid}")
-
-    if not is_valid:
-        print("6. SONUÇ: Şifreler EŞLEŞMEDİ!")
+    # Şifreyi doğrula
+    if not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Hatalı e-posta veya şifre.")
 
-    print("7. SONUÇ: GİRİŞ BAŞARILI, TOKEN ÜRETİLİYOR...")
-
+    # Giriş başarılıysa Token'ları üret
     access_token = security.create_access_token(data={"sub": user.email})
     refresh_token = security.create_refresh_token(data={"sub": user.email})
 
@@ -62,6 +48,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
         "refresh_token": refresh_token,
         "token_type": "bearer"
     }
+
 
 # REFRESH TOKEN
 @router.post("/refresh", response_model=Token)
