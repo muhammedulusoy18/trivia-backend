@@ -14,7 +14,8 @@ class ConnectionManager:
         self.question_start_time:float=0.0
         self.answer_times:dict={}
         self.is_active:bool=False
-
+        self.max_question:int=10
+        self.current_question_id:int=0
     async def connect(self ,websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)

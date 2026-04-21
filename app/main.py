@@ -86,6 +86,7 @@ async def get_and_send_new_question(manager_instance):
             "options": shuffled_options
         }
         await manager_instance.broadcast(question_packet)
+        manager.current_question_id+=1
         manager_instance.question_start_time=time.time()
         manager.timer_task = asyncio.create_task(start_timer(15, manager))
     else:
@@ -129,13 +130,20 @@ async def finish_round(manager,time_is_up=False):
 
     manager.current_answers = {}
     manager.answer_times = {}
-
-    await asyncio.sleep(3)
-    await manager.broadcast({"action": "chat", "content": "Yeni soru geliyor..."})
-    await asyncio.sleep(1)
-    await get_and_send_new_question(manager)
-
-
+    if manager.current_question_id<manager.max_question:
+        await asyncio.sleep(3)
+        await manager.broadcast({"action": "chat", "content":f"{manager.current_question_id} bitti yeni soru geliyor"})
+        await asyncio.sleep(1)
+        await get_and_send_new_question(manager)
+    else:
+        manager.is_active = False
+        manager.broadcast({
+            "action": "chat",
+            "content": "🎉 OYUN BİTTİ! Katılan herkese teşekkürler. İşte final sonuçları:"
+        })
+        await manager.broadcast({"action": "scoreboard", "scores": manager.scores})
+        await manager.broadcast({"action": "game_over"})
+        manager.current_question_id=0
 
 @app.get("/")
 async def get_test_page():
@@ -160,6 +168,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id):
             elif action == "start_game":
                 if not manager.is_active:
                     manager.is_active = True
+                    manager.current_question_id=0
+                    manager.scores = {k: 0 for k in manager.scores}
                     await get_and_send_new_question(manager)
                 else :
                     await websocket.send_json({"action":"chat",
