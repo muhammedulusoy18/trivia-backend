@@ -1,0 +1,114 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession  # YENİ ASENKRON SESSION
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import jwt
+
+from app.db.database import get_db
+from app.schemas.user import UserCreate, UserResponse
+from app.schemas.token import Token, TokenData
+from app.crud import user as user_crud
+from app.core import security
+
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+
+# KAYIT OLMA
+@router.post("/register", response_model=UserResponse)
+async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
+    # Bu emaille daha önce kayıt olunmuş mu
+    db_user = await user_crud.get_user_by_email(db, email=user_in.email)
+    if db_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Bu e-posta adresi zaten kullanımda."
+        )
+    # Yoksa, yeni kullanıcıyı oluştur
+    return await user_crud.create_user(db=db, user=user_in)
+
+
+# GİRİŞ YAPMA
+@router.post("/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    print("--- GİRİŞ TESTİ BAŞLIYOR ---")
+    print(f"1. FORMDAN GELEN EMAIL (Username kutusu): {form_data.username}")
+    print(f"2. FORMDAN GELEN ŞİFRE: {form_data.password}")
+
+    # Veritabanında kullanıcıyı arıyoruz
+    user = await user_crud.get_user_by_email(db, email=form_data.username)
+
+    if not user:
+        print("3. SONUÇ: Veritabanında bu e-postaya ait kullanıcı BULUNAMADI!")
+        raise HTTPException(status_code=400, detail="Hatalı e-posta veya şifre.")
+
+    print(f"3. KULLANICI BULUNDU: {user.email}")
+    print(f"4. DB'DEKİ HASH: {user.hashed_password}")
+
+    # Şifreleri karşılaştırıyoruz
+    is_valid = security.verify_password(form_data.password, user.hashed_password)
+    print(f"5. ŞİFRE DOĞRULAMA SONUCU: {is_valid}")
+
+    if not is_valid:
+        print("6. SONUÇ: Şifreler EŞLEŞMEDİ!")
+        raise HTTPException(status_code=400, detail="Hatalı e-posta veya şifre.")
+
+    print("7. SONUÇ: GİRİŞ BAŞARILI, TOKEN ÜRETİLİYOR...")
+
+    access_token = security.create_access_token(data={"sub": user.email})
+    refresh_token = security.create_refresh_token(data={"sub": user.email})
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
+
+# REFRESH TOKEN
+@router.post("/refresh", response_model=Token)
+async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
+    try:
+        # gelen refresh tokeni açıyoruz
+        payload = jwt.decode(refresh_token, security.settings.SECRET_KEY, algorithms=[security.settings.ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Geçersiz refresh token")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Refresh token süresi dolmuş veya geçersiz")
+
+    user = await user_crud.get_user_by_email(db, email=email)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+
+    new_access_token = security.create_access_token(data={"sub": user.email})
+    new_refresh_token = security.create_refresh_token(data={"sub": user.email})
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer"
+    }
+
+
+def get_current_user_token(token: str = Depends(oauth2_scheme)):
+    return token
+
+
+async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, security.settings.SECRET_KEY, algorithms=[security.settings.ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Geçersiz token: Email bulunamadı")
+        token_data = TokenData(email=email)
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Geçersiz veya süresi dolmuş token")
+
+    user = await user_crud.get_user_by_email(db, email=token_data.email)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    return user
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(current_user: UserResponse = Depends(get_current_user)):
+    return current_user
