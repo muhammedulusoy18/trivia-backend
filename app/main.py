@@ -15,6 +15,7 @@ from app.models.question import Question as question
 from fastapi.middleware.cors import CORSMiddleware
 from app.websockets.manager import manager
 from app.routers.api import auth
+from app.crud.user import update_user_score
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -146,6 +147,11 @@ async def finish_round(manager,time_is_up=False):
             "content": "🎉 OYUN BİTTİ! Katılan herkese teşekkürler. İşte final sonuçları:"
         })
         await manager.broadcast({"action": "scoreboard", "scores": manager.scores})
+        async with AsyncSessionLocal() as db_session:
+           for username,earned_points in manager.scores.items():
+               if earned_points>0:
+                   await update_user_score(db_session,username,earned_points)
+        await manager.broadcast({"action":"chat","content":"tüm puanlar kaydedildi"})
         await manager.broadcast({"action": "game_over"})
         manager.current_question_id=0
 
@@ -159,7 +165,7 @@ async def get_test_page():
     return {"error": "test_client.html bulunamadı!"}
 
 
-@app.websocket("/ws")  # DİKKAT: Artık /{client_id} yok! Sadece /ws
+@app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(None)):
     if token is None:
         await websocket.close(code=1008, reason="Token bulunamadı")

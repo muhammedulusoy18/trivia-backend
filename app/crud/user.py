@@ -23,9 +23,16 @@ async def create_user(db: AsyncSession, user: UserCreate):
         hashed_password=hashed_password,
         total_score=0  # Yeni eklediğimiz kasa
     )
-
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
 
     return db_user
+async def update_user_score(db: AsyncSession ,username:str,earned_points:int):
+    result=await db.execute(select(User).filter(User.username == username))
+    user=result.scalar_one_or_none()
+    if user:
+        user.total_score+=earned_points
+        await db.commit()
+        await db.refresh(user)
+    return user
