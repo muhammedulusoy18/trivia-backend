@@ -17,30 +17,41 @@
 
     <h1>Trivia Game</h1>
 
-    <div id="loginArea" class="card">
-        <h3>Oyuncu Girişi</h3>
-        <input type="text" id="emailInput" placeholder="E-posta Adresi">
-        <input type="password" id="passInput" placeholder="Şifre">
-        <button onclick="loginAndConnect()">Giriş Yap ve Bağlan</button>
-        <p id="statusMsg" style="color: #ff4444; font-size: 14px;"></p>
-    </div>
 
-    <div id="gameArea" class="card" style="display: none;">
+        <div id="authArea" class="card">
+            <div id="loginForm">
+                <h3>Oyuncu Girişi</h3>
+                <input type="text" id="emailInput" placeholder="E-posta Adresi">
+                <input type="password" id="passInput" placeholder="Şifre">
+                <button onclick="loginAndConnect()">Giriş Yap ve Bağlan</button>
+                <p style="text-align: center;">Hesabın yok mu? <a href="#" onclick="toggleAuth()" style="color: #ffcc00;">Kayıt Ol</a></p>
+            </div>
+
+            <div id="registerForm" style="display: none;">
+                <h3>Yeni Kayıt</h3>
+                <input type="text" id="regUsername" placeholder="Kullanıcı Adı">
+                <input type="email" id="regEmail" placeholder="E-posta Adresi">
+                <input type="password" id="regPass" placeholder="Şifre">
+                <button onclick="registerUser()" style="background-color: #4CAF50; color: white;">Kayıt İşlemini Tamamla</button>
+                <p style="text-align: center;"><a href="#" onclick="toggleAuth()" style="color: #ffcc00;">Giriş Ekranına Dön</a></p>
+            </div>
+            <p id="statusMsg" style="color: #ff4444; font-size: 14px; text-align: center;"></p>
+        </div>
+        <div id="gameArea" class="card" style="display: none;">
         <button id="startBtn" style="background-color: #e91e63;" onclick="startGame()">🎮 Oyunu Başlat</button>
         <h2 id="questionText">Soru Bekleniyor...</h2>
         <div id="optionsArea"></div>
     </div>
 
-    <div class="card" id="scoreCard" style="display: none;">
-        <h3>🏆 Liderlik Tablosu</h3>
-        <div id="scoreboardList"></div>
-    </div>
+        <div class="card" id="scoreCard" style="display: none;">
+            <h3>🏆 Liderlik Tablosu</h3>
+            <div id="scoreboardList"></div>
+        </div>
 
-    <div class="card">
-        <h3>Sistem Günlüğü</h3>
-        <div id="logBox"></div>
-    </div>
-
+        <div class="card">
+            <h3>Sistem Günlüğü</h3>
+            <div id="logBox"></div>
+        </div>
     <script>
         let ws;
 
@@ -77,12 +88,62 @@
                 logMessage("❌ Hata: " + err.message);
             }
         }
+        function toggleAuth() {
+    const loginF = document.getElementById("loginForm");
+    const regF = document.getElementById("registerForm");
+    const statusMsg = document.getElementById("statusMsg");
+    statusMsg.innerText = "";
+    
+    if (loginF.style.display === "none") {
+        loginF.style.display = "block";
+        regF.style.display = "none";
+    } else {
+        loginF.style.display = "none";
+        regF.style.display = "block";
+    }
+}   
+
+        async function registerUser() {
+            const username = document.getElementById("regUsername").value;
+            const email = document.getElementById("regEmail").value;
+            const password = document.getElementById("regPass").value;
+            const statusMsg = document.getElementById("statusMsg");
+
+            if (!username || !email || !password) {
+                statusMsg.innerText = "Lütfen tüm alanları doldurun!";
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8000/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: email,
+                        username: username,
+                        password: password
+                    })
+                });
+
+                if (response.ok) {
+                    statusMsg.style.color = "#4CAF50";
+                    statusMsg.innerText = "Kayıt başarılı! Şimdi giriş yapabilirsiniz.";
+                    setTimeout(toggleAuth, 2000);
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || "Kayıt başarısız.");
+                }
+            } catch (err) {
+                statusMsg.style.color = "#ff4444";
+                statusMsg.innerText = "Hata: " + err.message;
+            }
+        }
 
         function connectWebSocket(token) {
             ws = new WebSocket(`ws://localhost:8000/ws?token=${token}`);
 
             ws.onopen = () => {
-                document.getElementById("loginArea").style.display = "none";
+                document.getElementById("authArea").style.display = "none";
                 document.getElementById("gameArea").style.display = "block";
                 document.getElementById("scoreCard").style.display = "block";
                 logMessage("🌐 Oyun sunucusuna bağlanıldı!");
