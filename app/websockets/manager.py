@@ -16,6 +16,7 @@ class ConnectionManager:
         self.is_active:bool=False
         self.max_question:int=10
         self.current_question_id:int=0
+        self.question_time_limit:int=10
     async def connect(self ,websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)

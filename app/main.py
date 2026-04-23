@@ -3,14 +3,18 @@ import asyncio
 import time
 import os
 import jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.schemas.game_mode import GameModeCreate
 from app.core.config import settings
+from app.crud.game_mode_crud import get_mode_by_key
+from app.models.game_mode import GameMode
 from app.models.user import User
 from fastapi.responses import HTMLResponse
-from fastapi import WebSocket, FastAPI, WebSocketDisconnect,Query
+from fastapi import WebSocket, FastAPI, WebSocketDisconnect, Query, Depends
 from contextlib import asynccontextmanager
 from sqlalchemy.future import select
 from sqlalchemy.sql.expression import func
-from app.db.database import Base, engine, AsyncSessionLocal
+from app.db.database import Base, engine, AsyncSessionLocal, get_db
 from app.models.question import Question as question
 from fastapi.middleware.cors import CORSMiddleware
 from app.websockets.manager import manager
@@ -88,12 +92,13 @@ async def get_and_send_new_question(manager_instance):
         question_packet = {
             "action": "new_question",
             "question": db_question.question,
-            "options": shuffled_options
+            "options": shuffled_options,
+            "time_limit":manager.question_time_limit
         }
         await manager_instance.broadcast(question_packet)
         manager.current_question_id+=1
         manager_instance.question_start_time=time.time()
-        manager.timer_task = asyncio.create_task(start_timer(15, manager))
+        manager.timer_task = asyncio.create_task(start_timer(manager_instance.question_time_limit, manager_instance))
     else:
         print("Veritabanında soru bulunamadı.")
 
@@ -108,6 +113,25 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Trivia Game Server", lifespan=lifespan)
+@app.get("/game-modes")
+async def get_modes(db:AsyncSession=Depends(get_db)):
+    result=await db.execute(select(GameMode))
+    modes=result.scalars().all()
+    return{"modes":modes}
+@app.post("/game-modes")
+async def create_mode_api(mode_data:GameModeCreate,db:AsyncSession=Depends(get_db)):
+    existing=await get_mode_by_key(db,mode_data.key)
+    if existing:
+        return {"hata":"bu mod anahtarı zaten mevcut!."}
+    new_mode=GameMode(
+        key=mode_data.key,
+        label=mode_data.label,
+        max_question=mode_data.max_question,
+        question_duration=mode_data.question_duration
+    )
+    db.add(new_mode)
+    await db.commit()
+    return {"status": "success"}
 app.include_router(auth.router)
 app.add_middleware(
     CORSMiddleware,
@@ -122,7 +146,7 @@ async def finish_round(manager,time_is_up=False):
     for p_id, ans in manager.current_answers.items():
         if ans.upper() == manager.current_correct_answer.upper():
             time_taken=manager.answer_times[p_id]-manager.question_start_time
-            remaining_seconds=max(0,15-time_taken)
+            remaining_seconds=max(0,manager.question_time_limit-time_taken)
             bonus_points=int(remaining_seconds)
             total_earned=manager.current_question_points+bonus_points
             manager.scores[p_id] +=total_earned
@@ -191,11 +215,10 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None)):
         await websocket.close(code=1008, reason="Kullanıcı bulunamadı")
         return
 
-    # 3. KULLANICI DOĞRULANDI, OYUNA AL!
-    client_id = user.username  # Artık kimlik, veritabanındaki gerçek kullanıcı adı!
+
+    client_id = user.username
     await manager.connect(websocket)
 
-    # Eğer oyuncu skorbordda yoksa sıfır puanla ekle
     if client_id not in manager.scores:
         manager.scores[client_id] = 0
 
@@ -210,9 +233,25 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None)):
 
             elif action == "start_game":
                 if not manager.is_active:
+                    selected_key=data.get("mode","standart")
+                    async with AsyncSessionLocal() as db_session:
+                        mode_db=await get_mode_by_key(db_session,selected_key)
+                        if mode_db:
+                            manager.max_question=mode_db.max_question
+                            manager.question_time_limit=mode_db.question_duration
+                            current_label=mode_db.label
+                        else:
+                            manager.max_question=10
+                            manager.question_time_limit=15
+                            current_label="Varsayılan"
+
                     manager.is_active = True
                     manager.current_question_id = 0
                     manager.scores = {k: 0 for k in manager.scores}
+                    await manager.broadcast({
+                        "action": "chat",
+                        "content":f"🚀 OYUN BAŞLADI! Mod: {current_label} ({manager.max_question} Soru / {manager.question_time_limit} sn)"
+                    })
                     await get_and_send_new_question(manager)
                 else:
                     await websocket.send_json({

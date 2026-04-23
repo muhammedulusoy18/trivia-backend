@@ -11,49 +11,108 @@
         #logBox { height: 150px; overflow-y: scroll; background: #151522; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; border: 1px solid #333;}
         #optionsArea button { background-color: #4CAF50; color: white; margin: 5px 0; }
         .score-item { display: flex; justify-content: space-between; padding: 8px; background: #33334d; margin: 4px 0; border-radius: 4px; }
+        #myScorePopup {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            background: rgba(20, 20, 34, 0.95);
+            border: 1px solid #4caf50;
+            border-radius: 10px;
+            padding: 10px 14px;
+            min-width: 180px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+            z-index: 9999;
+            display: none;
+        }
+        #myScorePopup .title { font-size: 12px; opacity: 0.8; margin-bottom: 6px; }
+        #myScorePopup .score { font-size: 20px; font-weight: 700; color: #8dff95; }
+        #modeSelectionArea .mode-btn {
+            background-color: #34495e;
+            color: #ffffff;
+        }
+        #modeSelectionArea .mode-btn.active {
+            background-color: #4caf50;
+        }
+        #selectedModeLabel {
+            margin: 8px 0 12px;
+            font-size: 14px;
+            color: #d4ffd7;
+        }
+        #dynamicModeButtons { margin-bottom: 10px; }
+        #addModeForm {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        #addModeForm input {
+            width: auto;
+            margin-bottom: 0;
+        }
+        #addModeForm button { grid-column: 1 / 3; }
+        #myScorePopup.pulse {
+            animation: scorePulse 0.55s ease;
+        }
+        @keyframes scorePulse {
+            0% { transform: scale(1); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
+            45% { transform: scale(1.06); box-shadow: 0 0 20px rgba(141, 255, 149, 0.75); }
+            100% { transform: scale(1); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35); }
+        }
     </style>
 </head>
 <body>
 
     <h1>Trivia Game</h1>
 
+    <div id="loginArea" class="card">
+        <h3>Oyuncu Girişi</h3>
+        <input type="text" id="emailInput" placeholder="E-posta Adresi">
+        <input type="password" id="passInput" placeholder="Şifre">
+        <button onclick="loginAndConnect()">Giriş Yap ve Bağlan</button>
+        <p id="statusMsg" style="color: #ff4444; font-size: 14px;"></p>
+    </div>
 
-        <div id="authArea" class="card">
-            <div id="loginForm">
-                <h3>Oyuncu Girişi</h3>
-                <input type="text" id="emailInput" placeholder="E-posta Adresi">
-                <input type="password" id="passInput" placeholder="Şifre">
-                <button onclick="loginAndConnect()">Giriş Yap ve Bağlan</button>
-                <p style="text-align: center;">Hesabın yok mu? <a href="#" onclick="toggleAuth()" style="color: #ffcc00;">Kayıt Ol</a></p>
-            </div>
-
-            <div id="registerForm" style="display: none;">
-                <h3>Yeni Kayıt</h3>
-                <input type="text" id="regUsername" placeholder="Kullanıcı Adı">
-                <input type="email" id="regEmail" placeholder="E-posta Adresi">
-                <input type="password" id="regPass" placeholder="Şifre">
-                <button onclick="registerUser()" style="background-color: #4CAF50; color: white;">Kayıt İşlemini Tamamla</button>
-                <p style="text-align: center;"><a href="#" onclick="toggleAuth()" style="color: #ffcc00;">Giriş Ekranına Dön</a></p>
-            </div>
-            <p id="statusMsg" style="color: #ff4444; font-size: 14px; text-align: center;"></p>
-        </div>
-        <div id="gameArea" class="card" style="display: none;">
+    <div id="modeSelectionArea" class="card" style="display: none;">
+        <h3>🎯 Oyun Modu Seç</h3>
+        <div id="dynamicModeButtons"></div>
+        <p id="selectedModeLabel">Seçili mod: Standart</p>
         <button id="startBtn" style="background-color: #e91e63;" onclick="startGame()">🎮 Oyunu Başlat</button>
+        <h4>Yeni Mod Ekle</h4>
+        <div id="addModeForm">
+            <input id="newModeKey" type="text" placeholder="mod key (ornek: maraton)">
+            <input id="newModeLabel" type="text" placeholder="mod adi (ornek: Maraton)">
+            <input id="newModeQuestionCount" type="number" min="1" placeholder="soru sayisi">
+            <input id="newModeDuration" type="number" min="1" placeholder="sure (sn)">
+            <button onclick="createMode()">➕ Modu Kaydet</button>
+        </div>
+    </div>
+
+    <div id="gameArea" class="card" style="display: none;">
         <h2 id="questionText">Soru Bekleniyor...</h2>
         <div id="optionsArea"></div>
     </div>
 
-        <div class="card" id="scoreCard" style="display: none;">
-            <h3>🏆 Liderlik Tablosu</h3>
-            <div id="scoreboardList"></div>
-        </div>
+    <div class="card" id="scoreCard" style="display: none;">
+        <h3>🏆 Liderlik Tablosu</h3>
+        <div id="scoreboardList"></div>
+    </div>
 
-        <div class="card">
-            <h3>Sistem Günlüğü</h3>
-            <div id="logBox"></div>
-        </div>
+    <div class="card">
+        <h3>Sistem Günlüğü</h3>
+        <div id="logBox"></div>
+    </div>
+
+    <div id="myScorePopup">
+        <div class="title">Topladığın Puan</div>
+        <div class="score" id="myScoreValue">0 Puan</div>
+    </div>
+
     <script>
         let ws;
+        let currentPlayerKey = "";
+        let previousMyScore = 0;
+        let selectedMode = "standart";
+        let availableModes = [];
 
         async function loginAndConnect() {
             const email = document.getElementById("emailInput").value;
@@ -77,6 +136,7 @@
 
                 const authData = await response.json();
                 const token = authData.access_token;
+                currentPlayerKey = email.trim().toLowerCase();
 
                 logMessage("✅ Token alındı, WebSocket'e bağlanılıyor...");
 
@@ -88,65 +148,17 @@
                 logMessage("❌ Hata: " + err.message);
             }
         }
-        function toggleAuth() {
-    const loginF = document.getElementById("loginForm");
-    const regF = document.getElementById("registerForm");
-    const statusMsg = document.getElementById("statusMsg");
-    statusMsg.innerText = "";
-    
-    if (loginF.style.display === "none") {
-        loginF.style.display = "block";
-        regF.style.display = "none";
-    } else {
-        loginF.style.display = "none";
-        regF.style.display = "block";
-    }
-}   
-
-        async function registerUser() {
-            const username = document.getElementById("regUsername").value;
-            const email = document.getElementById("regEmail").value;
-            const password = document.getElementById("regPass").value;
-            const statusMsg = document.getElementById("statusMsg");
-
-            if (!username || !email || !password) {
-                statusMsg.innerText = "Lütfen tüm alanları doldurun!";
-                return;
-            }
-
-            try {
-                const response = await fetch('http://localhost:8000/auth/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email: email,
-                        username: username,
-                        password: password
-                    })
-                });
-
-                if (response.ok) {
-                    statusMsg.style.color = "#4CAF50";
-                    statusMsg.innerText = "Kayıt başarılı! Şimdi giriş yapabilirsiniz.";
-                    setTimeout(toggleAuth, 2000);
-                } else {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || "Kayıt başarısız.");
-                }
-            } catch (err) {
-                statusMsg.style.color = "#ff4444";
-                statusMsg.innerText = "Hata: " + err.message;
-            }
-        }
 
         function connectWebSocket(token) {
             ws = new WebSocket(`ws://localhost:8000/ws?token=${token}`);
 
             ws.onopen = () => {
-                document.getElementById("authArea").style.display = "none";
-                document.getElementById("gameArea").style.display = "block";
+                document.getElementById("loginArea").style.display = "none";
+                document.getElementById("modeSelectionArea").style.display = "block";
                 document.getElementById("scoreCard").style.display = "block";
+                document.getElementById("myScorePopup").style.display = "block";
                 logMessage("🌐 Oyun sunucusuna bağlanıldı!");
+                loadGameModes();
             };
 
             ws.onmessage = (event) => {
@@ -155,6 +167,8 @@
                 else if (data.action === "new_question") showQuestion(data);
                 else if (data.action === "scoreboard") updateScores(data.scores);
                 else if (data.action === "game_over") {
+                    document.getElementById("modeSelectionArea").style.display = "block";
+                    document.getElementById("gameArea").style.display = "none";
                     document.getElementById("startBtn").style.display = "block";
                     document.getElementById("questionText").innerText = "Oyun Bitti!";
                 }
@@ -167,6 +181,8 @@
         }
 
         function showQuestion(data) {
+            document.getElementById("modeSelectionArea").style.display = "none";
+            document.getElementById("gameArea").style.display = "block";
             document.getElementById("startBtn").style.display = "none";
             document.getElementById("questionText").innerText = data.question;
             const area = document.getElementById("optionsArea");
@@ -182,7 +198,91 @@
             }
         }
 
-        function startGame() { ws.send(JSON.stringify({action: "start_game"})); }
+        function selectMode(mode, btn) {
+            selectedMode = mode;
+            const buttons = document.querySelectorAll("#modeSelectionArea .mode-btn");
+            buttons.forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+            const activeMode = availableModes.find((m) => m.key === mode);
+            document.getElementById("selectedModeLabel").innerText = `Seçili mod: ${activeMode ? activeMode.label : "Standart"}`;
+        }
+
+        function startGame() {
+            ws.send(JSON.stringify({action: "start_game", mode: selectedMode}));
+            logMessage(`🎮 ${selectedMode.toUpperCase()} modu başlatıldı`);
+        }
+
+        async function loadGameModes() {
+            try {
+                const response = await fetch("http://localhost:8000/game-modes");
+                const data = await response.json();
+                availableModes = Array.isArray(data.modes) ? data.modes : [];
+                renderModeButtons();
+            } catch (err) {
+                logMessage("❌ Oyun modlari alinamadi");
+            }
+        }
+
+        function renderModeButtons() {
+            const container = document.getElementById("dynamicModeButtons");
+            if (!availableModes.length) {
+                container.innerHTML = "<em>Mod bulunamadi.</em>";
+                return;
+            }
+
+            container.innerHTML = "";
+            availableModes.forEach((mode, index) => {
+                const btn = document.createElement("button");
+                btn.className = "mode-btn";
+                if ((selectedMode === mode.key) || (!selectedMode && index === 0)) {
+                    btn.classList.add("active");
+                    selectedMode = mode.key;
+                }
+                btn.innerText = `${mode.label} (${mode.max_question} Soru / ${mode.question_duration} sn)`;
+                btn.onclick = () => selectMode(mode.key, btn);
+                container.appendChild(btn);
+            });
+            const activeMode = availableModes.find((m) => m.key === selectedMode) || availableModes[0];
+            document.getElementById("selectedModeLabel").innerText = `Seçili mod: ${activeMode.label}`;
+        }
+
+        async function createMode() {
+            const key = document.getElementById("newModeKey").value.trim().toLowerCase();
+            const label = document.getElementById("newModeLabel").value.trim();
+            const maxQuestion = Number(document.getElementById("newModeQuestionCount").value);
+            const questionDuration = Number(document.getElementById("newModeDuration").value);
+
+            if (!key || !label || maxQuestion <= 0 || questionDuration <= 0) {
+                logMessage("⚠️ Yeni mod bilgilerini eksiksiz gir");
+                return;
+            }
+
+            try {
+                const response = await fetch("http://localhost:8000/game-modes", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        key,
+                        label,
+                        max_question: maxQuestion,
+                        question_duration: questionDuration
+                    })
+                });
+                const result = await response.json();
+                if (result.error) {
+                    logMessage(`❌ ${result.error}`);
+                    return;
+                }
+                logMessage("✅ Yeni mod eklendi");
+                document.getElementById("newModeKey").value = "";
+                document.getElementById("newModeLabel").value = "";
+                document.getElementById("newModeQuestionCount").value = "";
+                document.getElementById("newModeDuration").value = "";
+                await loadGameModes();
+            } catch (err) {
+                logMessage("❌ Mod eklenemedi");
+            }
+        }
 
         function updateScores(scores) {
             const list = document.getElementById("scoreboardList");
@@ -190,6 +290,26 @@
                 .sort((a,b) => b[1]-a[1])
                 .map(s => `<div class="score-item"><span>${s[0]}</span><span>${s[1]} Puan</span></div>`)
                 .join("");
+
+            updateMyScore(scores);
+        }
+
+        function updateMyScore(scores) {
+            const scoreValue = document.getElementById("myScoreValue");
+            const popup = document.getElementById("myScorePopup");
+            const entries = Object.entries(scores);
+            const exactMatch = entries.find(([name]) => name.trim().toLowerCase() === currentPlayerKey);
+            const localPart = currentPlayerKey.includes("@") ? currentPlayerKey.split("@")[0] : currentPlayerKey;
+            const fallbackMatch = entries.find(([name]) => name.trim().toLowerCase() === localPart);
+            const myScore = exactMatch ? exactMatch[1] : (fallbackMatch ? fallbackMatch[1] : 0);
+            scoreValue.innerText = `${myScore} Puan`;
+
+            if (myScore > previousMyScore) {
+                popup.classList.remove("pulse");
+                void popup.offsetWidth;
+                popup.classList.add("pulse");
+            }
+            previousMyScore = myScore;
         }
 
         function logMessage(m) {
