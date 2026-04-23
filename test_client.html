@@ -151,7 +151,7 @@
             }
 
             try {
-                const response = await fetch('http://localhost:8000/auth/register', {
+                const response = await fetch('http://192.168.137.1:8000/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -188,7 +188,7 @@
                 formData.append('username', email); // OAuth2 şifre akışında email 'username' olarak gider
                 formData.append('password', password);
 
-                const response = await fetch('http://localhost:8000/auth/login', {
+                const response = await fetch('http://192.168.137.1:8000/auth/login', {
                     method: 'POST',
                     body: formData
                 });
@@ -211,7 +211,7 @@
         }
 
         function connectWebSocket(token) {
-            ws = new WebSocket(`ws://localhost:8000/ws?token=${token}`);
+            ws = new WebSocket(`ws://192.168.137.1:8000/ws?token=${token}`);
 
             ws.onopen = () => {
                 document.getElementById("authArea").style.display = "none";
@@ -275,7 +275,7 @@
 
         async function loadGameModes() {
             try {
-                const response = await fetch("http://localhost:8000/game-modes");
+                const response = await fetch("http://192.168.137.1:8000/game-modes");
                 const data = await response.json();
                 availableModes = Array.isArray(data.modes) ? data.modes : [];
                 renderModeButtons();
@@ -319,7 +319,7 @@
             }
 
             try {
-                const response = await fetch("http://localhost:8000/game-modes", {
+                const response = await fetch("http://192.168.137.1:8000/game-modes", {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({
