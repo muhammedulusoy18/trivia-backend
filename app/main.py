@@ -37,6 +37,7 @@ async def seed_questions():
             session.add_all(sorular)
             await session.commit()
             print("Örnek sorular eklendi!")
+
 async def start_timer(seconds:int,manager):
 
    try:

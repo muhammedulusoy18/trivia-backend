@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession  # YENİ ASENKRON SESSION
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import jwt
+from sqlalchemy.future import select
 
 from app.db.database import get_db
+from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
 from app.schemas.token import Token, TokenData
 from app.crud import user as user_crud
@@ -95,6 +97,14 @@ async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depe
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
     return user
 
+@router.get("/top-scores")
+async def get_top_score(db:AsyncSession=Depends(get_db)):
+    result=await db.execute(select(User).order_by(User.total_score.desc()).limit(10))
+    top_users = result.scalars().all()
+    return[
+        {"username": u.username, "total_score": u.total_score}
+        for u in top_users
+    ]
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: UserResponse = Depends(get_current_user)):
